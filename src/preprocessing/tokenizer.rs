@@ -15,7 +15,7 @@ pub fn load_stop_words(path: &str) -> Result<HashSet<String>, Box<dyn Error>> {
     Ok(stop_words)
 }
 
-pub fn build_vocabulary(documents: &[Document], stop_words: &HashSet<String>) -> HashMap<String, usize> {
+pub fn build_vocabulary(documents: &Vec<Document>, stop_words: &HashSet<String>) -> HashMap<String, usize> {
     let re = Regex::new(r"[a-zA-Z]+").unwrap();
     let mut terms = HashSet::new();
 
