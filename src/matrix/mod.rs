@@ -1,7 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use sprs::{CsMat, TriMat};
 use crate::document::parser::Document;
-
 pub struct TfIdfMatrix {
     pub terms: HashMap<String, usize>,
     pub matrix: CsMat<f64>,
@@ -71,8 +70,17 @@ impl TfIdfMatrix {
             tri_mat.add_triplet(row, col, val);
         }
 
-        let matrix = tri_mat.to_csc(); // macierz kolumnowo-rzadka
+        let mut matrix = tri_mat.to_csc(); // macierz kolumnowo-rzadka
 
+        for mut col in matrix.outer_iterator_mut() {
+            let norm = col.iter().map(|(_, v)| v * v).sum::<f64>().sqrt();
+            if norm > 0.0 {
+                // Iterujemy przez dane w kolumnie i normalizujemy je
+                for (_, value) in col.iter_mut() {
+                    *value /= norm;
+                }
+            }
+        }
         Self {
             terms: terms.clone(),
             matrix,
