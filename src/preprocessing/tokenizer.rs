@@ -3,6 +3,7 @@ use std::fs;
 use std::error::Error;
 use regex::Regex;
 use crate::document::parser::Document;
+use crate::stemer;
 
 pub fn load_stop_words(path: &str) -> Result<HashSet<String>, Box<dyn Error>> {
     let content = fs::read_to_string(path)?;
@@ -22,8 +23,9 @@ pub fn build_vocabulary(documents: &[Document], stop_words: &HashSet<String>) ->
         let full_text = format!("{} {}", doc.title, doc.text);
         for word in re.find_iter(&full_text.to_lowercase()) {
             let term = word.as_str().to_string();
-            if !stop_words.contains(&term) {  // Porównujemy ze słowami w HashSet<String>
-                terms.insert(term);
+            if !stop_words.contains(&term) {
+                let stemmed = stemer::porter_algorithm::porter_stem(&term);
+                terms.insert(stemmed);// Porównujemy ze słowami w HashSet<String>
             }
         }
     }
