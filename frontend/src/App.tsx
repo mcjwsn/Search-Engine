@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 
-// Define types for our data
 interface Document {
   id: string;
   title: string;
