@@ -1,70 +1,33 @@
-#[derive(Debug)]
+use rusqlite::{Connection, Result};
+use std::path::Path;
 
+#[derive(Debug)]
 pub struct Document {
-    pub id: String,
+    pub id: i64,          // Changed to i64 for INTEGER primary key
     pub title: String,
+    pub url: String,      // Added url field
     pub text: String,
     pub authors: Vec<String>,
 }
-pub fn parse_cisi_documents(content: &str) -> Vec<Document> {
+
+pub fn parse_sqlite_documents(db_path: &str) -> Result<Vec<Document>, rusqlite::Error> {
+    let conn = Connection::open(Path::new(db_path))?;
+
+    let mut stmt = conn.prepare("SELECT id, title, url, text FROM articles")?;
+    let document_iter = stmt.query_map([], |row| {
+        Ok(Document {
+            id: row.get(0)?,       // i64
+            title: row.get(1)?,    // String
+            url: row.get(2)?,      // String
+            text: row.get(3)?,     // String
+            authors: Vec::new(),   // Will be populated separately
+        })
+    })?;
+
     let mut documents = Vec::new();
-    let mut current_id = String::new();
-    let mut current_title = String::new();
-    let mut current_text = String::new();
-    let mut current_authors = Vec::new();
-
-    let mut section = "";
-
-    for line in content.lines() {
-        let line = line.trim();
-        if line.starts_with(".I") {
-            // Save previous document if any
-            if !current_id.is_empty() {
-                documents.push(Document {
-                    id: current_id.clone(),
-                    title: current_title.trim().to_string(),
-                    text: current_text.trim().to_string(),
-                    authors: current_authors.clone(),
-                });
-                current_title.clear();
-                current_text.clear();
-                current_authors.clear();
-            }
-            current_id = line[2..].trim().to_string();
-            section = "";
-        } else if line.starts_with(".T") {
-            section = "T";
-        } else if line.starts_with(".A") {
-            section = "A";
-        } else if line.starts_with(".W") {
-            section = "W";
-        } else {
-            match section {
-                "T" => {
-                    current_title.push_str(line);
-                    current_title.push('\n');
-                }
-                "A" => {
-                    current_authors.push(line.to_string());
-                }
-                "W" => {
-                    current_text.push_str(line);
-                    current_text.push('\n');
-                }
-                _ => {}
-            }
-        }
+    for doc in document_iter {
+        documents.push(doc?);
     }
 
-    // Add last document
-    if !current_id.is_empty() {
-        documents.push(Document {
-            id: current_id,
-            title: current_title.trim().to_string(),
-            text: current_text.trim().to_string(),
-            authors: current_authors,
-        });
-    }
-
-    documents
+    Ok(documents)
 }
