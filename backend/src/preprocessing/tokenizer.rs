@@ -25,12 +25,11 @@ pub fn build_vocabulary(documents: &Vec<Document>, stop_words: &HashSet<String>)
             let term = word.as_str().to_string();
             if !stop_words.contains(&term) {
                 let stemmed = stemer::porter_algorithm::porter_stem(&term);
-                terms.insert(stemmed);// Porównujemy ze słowami w HashSet<String>
+                terms.insert(stemmed);
             }
         }
     }
 
-    // Posortuj i stwórz słownik (słowo -> indeks)
     let mut term_list: Vec<String> = terms.into_iter().collect();
     term_list.sort();
     term_list

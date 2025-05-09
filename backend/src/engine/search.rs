@@ -19,7 +19,6 @@ pub fn search(query: &str, tfidf: &TfIdfMatrix, k: usize) -> Vec<(usize, f64)> {
         }
     }
 
-    // Zbuduj wektor q (TF-IDF)
     let mut indices = Vec::new();
     let mut data = Vec::new();
     for (term_idx, count) in query_tf {
@@ -36,8 +35,6 @@ pub fn search(query: &str, tfidf: &TfIdfMatrix, k: usize) -> Vec<(usize, f64)> {
         query_vec.clone()
     };
 
-
-    // Oblicz kosinusową podobieństwo
     let mut similarities = Vec::new();
     for doc_idx in 0..tfidf.matrix.cols() {
         let doc_vec = tfidf.matrix.outer_view(doc_idx).unwrap();
@@ -45,7 +42,6 @@ pub fn search(query: &str, tfidf: &TfIdfMatrix, k: usize) -> Vec<(usize, f64)> {
         similarities.push((doc_idx, sim));
     }
 
-    // Zwróć top-k wyników
     similarities.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
     similarities.truncate(k);
     similarities

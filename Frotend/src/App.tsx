@@ -212,7 +212,6 @@ interface Document {
   id: string;
   title: string;
   text: string;
-  authors: string[];
   score: number;
 }
 
@@ -446,9 +445,6 @@ function SearchPage() {
                     <div style={styles.resultMeta}>
                       Document #{result.id} | Score: {result.score.toFixed(4)}
                     </div>
-                    <div style={styles.resultAuthor}>
-                      {result.authors && result.authors.length > 0 ? result.authors.join(', ') : 'Unknown Author'}
-                    </div>
                     <p style={styles.resultSnippet}>
                       {result.text ? result.text.substring(0, 150) + (result.text.length > 150 ? '...' : '') : 'No text available.'}
                     </p>
@@ -548,19 +544,6 @@ function DocumentPage() {
           <h1 style={styles.documentTitle}>
             {document.title || 'Untitled Document'}
           </h1>
-          
-          <div style={styles.documentSection}>
-            <h2 style={styles.documentSectionTitle}>Authors</h2>
-            {document.authors && document.authors.length > 0 ? (
-              <ul style={{paddingLeft: '20px'}}>
-                {document.authors.map((author, index) => (
-                  <li key={index}>{author}</li>
-                ))}
-              </ul>
-            ) : (
-              <p style={{color: '#666'}}>Unknown Author</p>
-            )}
-          </div>
           
           <div style={styles.documentSection}>
             <h2 style={styles.documentSectionTitle}>Document Text</h2>

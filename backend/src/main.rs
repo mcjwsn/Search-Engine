@@ -1,10 +1,8 @@
 use actix_cors::Cors;
 use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
 use serde::{Deserialize, Serialize};
-use std::fs;
 use std::sync::Mutex;
 use std::sync::Arc;
-use std::path::Path;
 use crate::document::parser::parse_sqlite_documents;
 mod document;
 mod preprocessing;
@@ -21,7 +19,6 @@ struct SearchResult {
     score: f64,
     title: String,
     text: String,
-    authors: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -58,7 +55,6 @@ async fn search(query: web::Json<SearchQuery>, data: web::Data<Mutex<AppState>>)
                 score,
                 title: doc.title.clone(),
                 text: doc.text.clone(),
-                authors: doc.authors.clone(),
             }
         })
         .collect();

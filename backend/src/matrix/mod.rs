@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use sprs::{CsMat, TriMat};
 use crate::document::parser::Document;
+
 pub struct TfIdfMatrix {
     pub terms: HashMap<String, usize>,
     pub matrix: CsMat<f64>,
@@ -12,16 +13,16 @@ impl TfIdfMatrix {
         let n_docs = documents.len();
         let n_terms = terms.len();
 
-        let mut df = vec![0; n_terms]; // Document frequency dla każdego termu
-        let mut triplets = Vec::new(); // (term_index, doc_index, tf)
+        let mut df = vec![0; n_terms];
+        let mut triplets = Vec::new();
 
+        // First pass: compute document frequencies (df) and collect term counts
         for (doc_index, doc) in documents.iter().enumerate() {
             let mut term_counts = HashMap::new();
             let mut seen_terms = HashSet::new();
 
             let text = format!("{} {}", doc.title, doc.text);
-            let lowercased = text.to_lowercase(); // teraz wartość żyje odpowiednio długo
-
+            let lowercased = text.to_lowercase();
             let tokens = lowercased
                 .split_whitespace()
                 .map(|t| t.trim_matches(|c: char| !c.is_alphabetic()));
@@ -44,7 +45,7 @@ impl TfIdfMatrix {
             }
         }
 
-        // Oblicz IDF
+        // Compute IDF
         let idf: Vec<f64> = df
             .iter()
             .map(|&df| {
@@ -56,8 +57,8 @@ impl TfIdfMatrix {
             })
             .collect();
 
-        // Oblicz TF-IDF i zbuduj rzadką macierz
-        let tf_idf_triplets: Vec<_> = triplets
+        // Compute TF-IDF and sort triplets before matrix construction
+        let mut tf_idf_triplets: Vec<_> = triplets
             .into_iter()
             .map(|(term_index, doc_index, tf)| {
                 let value = tf * idf[term_index];
@@ -65,22 +66,31 @@ impl TfIdfMatrix {
             })
             .collect();
 
+        // Sort triplets by column (doc_index) first, then by row (term_index)
+        tf_idf_triplets.sort_by(|a, b| {
+            a.1.cmp(&b.1)
+                .then_with(|| a.0.cmp(&b.0))
+        });
+
+        // Build the matrix
         let mut tri_mat = TriMat::new((n_terms, n_docs));
         for (row, col, val) in tf_idf_triplets {
             tri_mat.add_triplet(row, col, val);
         }
 
-        let mut matrix = tri_mat.to_csc(); // macierz kolumnowo-rzadka
+        // Convert to CSC format (requires sorted indices)
+        let mut matrix = tri_mat.to_csc();
 
+        // Normalize columns (document vectors)
         for mut col in matrix.outer_iterator_mut() {
             let norm = col.iter().map(|(_, v)| v * v).sum::<f64>().sqrt();
             if norm > 0.0 {
-                // Iterujemy przez dane w kolumnie i normalizujemy je
                 for (_, value) in col.iter_mut() {
                     *value /= norm;
                 }
             }
         }
+
         Self {
             terms: terms.clone(),
             matrix,

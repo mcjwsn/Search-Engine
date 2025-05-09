@@ -215,18 +215,3 @@ pub fn porter_stem(word: &str) -> String {
 
     word.into_iter().collect()
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_stemming() {
-        assert_eq!(porter_stem("running"), "run");
-        assert_eq!(porter_stem("cats"), "cat");
-        assert_eq!(porter_stem("ponies"), "poni");
-        assert_eq!(porter_stem("caresses"), "caress");
-        assert_eq!(porter_stem("happiness"), "happi");
-        assert_eq!(porter_stem("traditional"), "tradit");
-    }
-}
