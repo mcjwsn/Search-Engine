@@ -4,6 +4,24 @@ import logoImage from './logo.jpg';
 import './App.css';
 
 const styles = {
+  svdOptions: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    marginTop: '10px',
+    padding: '5px',
+    borderRadius: '4px',
+    backgroundColor: '#f5f5f5',
+  },
+  
+  // Zaktualizowany styl dla searchTime, aby pokazać informacje o SVD
+  searchTime: {
+    fontSize: '14px',
+    color: '#666',
+    marginBottom: '15px',
+    paddingBottom: '10px',
+    borderBottom: '1px solid #eee',
+  },
   container: {
     maxWidth: '1000px',
     margin: '0 auto',
@@ -84,13 +102,6 @@ const styles = {
   },
   resultsContainer: {
     marginTop: '20px'
-  },
-  searchTime: {
-    fontSize: '12px',
-    color: '#666',
-    borderBottom: '1px solid #dfe1e5',
-    paddingBottom: '10px',
-    marginBottom: '20px'
   },
   loadingContainer: {
     textAlign: 'center' as const,
@@ -207,7 +218,6 @@ const styles = {
     borderRadius: '4px'
   }
 };
-
 interface Document {
   id: string;
   title: string;
@@ -229,6 +239,9 @@ function SearchPage() {
   const [error, setError] = useState<string | null>(null);
   const [resultCount, setResultCount] = useState<number>(10);
   const [searchTime, setSearchTime] = useState<number | null>(null);
+  // Nowe zmienne stanu dla SVD
+  const [useSvd, setUseSvd] = useState<boolean>(false);
+  const [kValue, setKValue] = useState<number>(10);
   const navigate = useNavigate();
 
   const API_URL = 'http://127.0.0.1:8080';
@@ -273,15 +286,20 @@ function SearchPage() {
     const startTime = performance.now();
     
     try {
-      const response = await fetch(`${API_URL}/search`, {
+      // Wybór odpowiedniego endpointu w zależności od tego, czy używamy SVD
+      const endpoint = useSvd ? `${API_URL}/search_svd` : `${API_URL}/search`;
+      
+      // Przygotuj body zapytania w zależności od wybranej opcji
+      const requestBody = useSvd 
+        ? { query, limit: resultCount, use_svd: true, k_value: kValue }
+        : { query, limit: resultCount };
+      
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ 
-          query: query,
-          limit: resultCount
-        }),
+        body: JSON.stringify(requestBody),
       });
       
       if (!response.ok) {
@@ -383,6 +401,42 @@ function SearchPage() {
             </button>
           </div>
           
+          {/* Dodajemy nowy panel ustawień SVD */}
+          <div style={styles.svdOptions}>
+            <div style={{display: 'flex', alignItems: 'center', marginRight: '15px'}}>
+              <input
+                id="useSvd"
+                type="checkbox"
+                checked={useSvd}
+                onChange={(e) => setUseSvd(e.target.checked)}
+                style={{marginRight: '5px'}}
+                disabled={apiStatus !== 'connected'}
+              />
+              <label htmlFor="useSvd">Use SVD</label>
+            </div>
+            
+            {useSvd && (
+              <div style={{display: 'flex', alignItems: 'center'}}>
+                <label htmlFor="kValue" style={{marginRight: '5px'}}>k value:</label>
+                <select
+                  id="kValue"
+                  value={kValue}
+                  onChange={(e) => setKValue(Number(e.target.value))}
+                  style={{
+                    border: '1px solid #dfe1e5', 
+                    borderRadius: '4px', 
+                    padding: '2px'
+                  }}
+                  disabled={apiStatus !== 'connected' || !useSvd}
+                >
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                </select>
+              </div>
+            )}
+          </div>
+          
           <div style={styles.searchStats}>
             <div>
               {stats && apiStatus === 'connected' && (
@@ -419,6 +473,7 @@ function SearchPage() {
           {searchTime !== null && results.length > 0 && (
             <div style={styles.searchTime}>
               About {results.length} results ({searchTime.toFixed(3)} seconds)
+              {useSvd && <span> using SVD (k={kValue})</span>}
             </div>
           )}
           
@@ -458,8 +513,7 @@ function SearchPage() {
     </div>
   );
 }
-
-function DocumentPage() {
+  function DocumentPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const docId = window.location.pathname.split('/').pop() || '';
