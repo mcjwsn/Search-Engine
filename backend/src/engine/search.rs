@@ -19,22 +19,32 @@ pub fn search(query: &str, tfidf: &TfIdfMatrix, k: usize) -> Vec<(usize, f64)> {
         }
     }
 
-    let mut indices = Vec::new();
-    let mut data = Vec::new();
+    // Zbuduj wektor q (TF-IDF)
+    let mut indices_and_data: Vec<(usize, f64)> = Vec::new();
     for (term_idx, count) in query_tf {
         let tf = count as f64 / total_terms as f64;
         let idf = tfidf.idf[term_idx];
-        indices.push(term_idx);
-        data.push(tf * idf);
+        indices_and_data.push((term_idx, tf * idf));
     }
+
+    // Sort by indices to ensure they're in ascending order
+    indices_and_data.sort_by_key(|&(idx, _)| idx);
+
+    // Extract sorted indices and data
+    let indices: Vec<usize> = indices_and_data.iter().map(|&(idx, _)| idx).collect();
+    let data: Vec<f64> = indices_and_data.iter().map(|&(_, val)| val).collect();
+
+    // Create sparse vector with sorted indices
     let query_vec = CsVec::new(tfidf.terms.len(), indices, data);
+
     let norm_query = query_vec.iter().map(|(_, v)| v * v).sum::<f64>().sqrt();
     let normalized_q = if norm_query > 0.0 {
         query_vec.map(|v| v / norm_query)
     } else {
-        query_vec.clone()
+        query_vec
     };
 
+    // Oblicz kosinusową podobieństwo
     let mut similarities = Vec::new();
     for doc_idx in 0..tfidf.matrix.cols() {
         let doc_vec = tfidf.matrix.outer_view(doc_idx).unwrap();
@@ -42,6 +52,7 @@ pub fn search(query: &str, tfidf: &TfIdfMatrix, k: usize) -> Vec<(usize, f64)> {
         similarities.push((doc_idx, sim));
     }
 
+    // Zwróć top-k wyników
     similarities.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
     similarities.truncate(k);
     similarities

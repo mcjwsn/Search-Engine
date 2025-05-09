@@ -1,7 +1,8 @@
 use rusqlite::{Connection, Result};
 use std::path::Path;
+use serde::{Serialize, Deserialize};
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Document {
     pub id: i64,
     pub title: String,
