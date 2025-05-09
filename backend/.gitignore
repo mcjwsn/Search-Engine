@@ -2,3 +2,4 @@
 Cargo.lock
 /data
 /stop_words
+search_index_cache.bin
