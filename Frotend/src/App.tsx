@@ -3,221 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Link, useNavigate, useLocation 
 import logoImage from './logo.jpg';
 import './App.css';
 
-const styles = {
-  svdOptions: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-    marginTop: '10px',
-    padding: '5px',
-    borderRadius: '4px',
-    backgroundColor: '#f5f5f5',
-  },
-  
-  // Zaktualizowany styl dla searchTime, aby pokazać informacje o SVD
-  searchTime: {
-    fontSize: '14px',
-    color: '#666',
-    marginBottom: '15px',
-    paddingBottom: '10px',
-    borderBottom: '1px solid #eee',
-  },
-  container: {
-    maxWidth: '1000px',
-    margin: '0 auto',
-    padding: '20px',
-    fontFamily: 'Arial, sans-serif',
-    minHeight: '100vh'
-  },
-  centerContainer: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: '50px'
-  },
-  logoContainer: {
-    marginBottom: '30px',
-    textAlign: 'center' as const
-  },
-  logoPlaceholder: {
-    width: '250px',
-    height: '100px',
-    backgroundColor: '#f0f0f0',
-    margin: '0 auto 20px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: '8px'
-  },
-  logoText: {
-    fontSize: '48px',
-    fontWeight: 'bold'
-  },
-  logoR: { color: '#4285F4' },
-  logoU: { color: '#EA4335' },
-  logoS: { color: '#FBBC05' },
-  logoT: { color: '#4285F4' },
-  logoL: { color: '#34A853' },
-  logoE: { color: '#EA4335' },
-  searchContainer: {
-    width: '100%',
-    maxWidth: '600px',
-    marginBottom: '20px'
-  },
-  searchForm: {
-    display: 'flex',
-    gap: '10px',
-    marginBottom: '10px'
-  },
-  searchInput: {
-    flex: '1',
-    padding: '12px 20px',
-    fontSize: '16px',
-    border: '1px solid #dfe1e5',
-    borderRadius: '24px',
-    boxShadow: '0 1px 6px rgba(32, 33, 36, 0.28)',
-    outline: 'none'
-  },
-  searchButton: {
-    padding: '0 20px',
-    backgroundColor: '#4285F4',
-    color: 'white',
-    border: 'none',
-    borderRadius: '24px',
-    fontSize: '16px',
-    fontWeight: 'bold',
-    cursor: 'pointer'
-  },
-  disabledButton: {
-    backgroundColor: '#ccc',
-    cursor: 'not-allowed'
-  },
-  searchStats: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    fontSize: '12px',
-    color: '#666',
-    padding: '0 20px'
-  },
-  resultsContainer: {
-    marginTop: '20px'
-  },
-  loadingContainer: {
-    textAlign: 'center' as const,
-    padding: '40px'
-  },
-  loader: {
-    border: '4px solid #f3f3f3',
-    borderTop: '4px solid #3498db',
-    borderRadius: '50%',
-    width: '30px',
-    height: '30px',
-    animation: 'spin 2s linear infinite',
-    margin: '0 auto 10px'
-  },
-  resultItem: {
-    marginBottom: '25px',
-    padding: '0 15px',
-    cursor: 'pointer'
-  },
-  resultTitle: {
-    fontSize: '18px',
-    fontWeight: '500',
-    color: '#1a0dab',
-    marginBottom: '3px',
-    textDecoration: 'none'
-  },
-  resultMeta: {
-    fontSize: '12px',
-    color: '#006621',
-    marginBottom: '3px'
-  },
-  resultAuthor: {
-    fontSize: '14px',
-    color: '#666',
-    marginBottom: '3px'
-  },
-  resultSnippet: {
-    fontSize: '14px',
-    color: '#333',
-    lineHeight: '1.5'
-  },
-  documentContainer: {
-    maxWidth: '800px',
-    margin: '0 auto',
-    padding: '20px',
-    fontFamily: 'Arial, sans-serif'
-  },
-  documentHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    marginBottom: '30px'
-  },
-  backButton: {
-    marginRight: '15px',
-    padding: '10px',
-    backgroundColor: 'transparent',
-    border: 'none',
-    cursor: 'pointer',
-    borderRadius: '50%'
-  },
-  documentContent: {
-    backgroundColor: 'white',
-    padding: '20px',
-    borderRadius: '8px',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.12)'
-  },
-  documentTitle: {
-    fontSize: '24px',
-    fontWeight: 'bold',
-    marginBottom: '15px',
-    paddingBottom: '10px',
-    borderBottom: '1px solid #dfe1e5'
-  },
-  documentSection: {
-    marginBottom: '20px'
-  },
-  documentSectionTitle: {
-    fontSize: '18px',
-    fontWeight: '500',
-    marginBottom: '10px'
-  },
-  documentText: {
-    backgroundColor: '#f8f9fa',
-    padding: '15px',
-    borderRadius: '4px',
-    whiteSpace: 'pre-line' as const,
-    lineHeight: '1.5'
-  },
-  documentFooter: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#f8f9fa',
-    padding: '10px',
-    borderRadius: '4px',
-    marginTop: '20px'
-  },
-  documentId: {
-    fontSize: '14px',
-    color: '#666'
-  },
-  documentScore: {
-    fontSize: '12px',
-    backgroundColor: '#e8f0fe',
-    color: '#1a73e8',
-    padding: '3px 8px',
-    borderRadius: '12px'
-  },
-  errorContainer: {
-    padding: '15px',
-    backgroundColor: '#fff8f8',
-    border: '1px solid #fcc',
-    color: '#d33',
-    borderRadius: '4px'
-  }
-};
+
 interface Document {
   id: string;
   title: string;
@@ -239,9 +25,6 @@ function SearchPage() {
   const [error, setError] = useState<string | null>(null);
   const [resultCount, setResultCount] = useState<number>(10);
   const [searchTime, setSearchTime] = useState<number | null>(null);
-  // Nowe zmienne stanu dla SVD
-  const [useSvd, setUseSvd] = useState<boolean>(false);
-  const [kValue, setKValue] = useState<number>(10);
   const navigate = useNavigate();
 
   const API_URL = 'http://127.0.0.1:8080';
@@ -286,20 +69,15 @@ function SearchPage() {
     const startTime = performance.now();
     
     try {
-      // Wybór odpowiedniego endpointu w zależności od tego, czy używamy SVD
-      const endpoint = useSvd ? `${API_URL}/search_svd` : `${API_URL}/search`;
-      
-      // Przygotuj body zapytania w zależności od wybranej opcji
-      const requestBody = useSvd 
-        ? { query, limit: resultCount, use_svd: true, k_value: kValue }
-        : { query, limit: resultCount };
-      
-      const response = await fetch(endpoint, {
+      const response = await fetch(`${API_URL}/search`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(requestBody),
+        body: JSON.stringify({ 
+          query: query,
+          limit: resultCount
+        }),
       });
       
       if (!response.ok) {
@@ -330,27 +108,23 @@ function SearchPage() {
   };
 
   return (
-    <div style={styles.container}>
+    <div className="container">
       {}
-      <div style={styles.centerContainer}>
+      <div className="centerContainer">
         {}
-        <div style={styles.logoContainer}>
+        <div className="logo-container">
           <img 
             src={logoImage} 
             alt="Logo" 
-            style={{ 
-              width: '250px', 
-              height: 'auto',
-              marginBottom: '20px'
-            }} 
+            className="logoImage"
           />
         </div>
 
         {}
-        <div style={styles.searchContainer}>
+        <div className="searchContainer">
           {}
           {apiStatus === 'error' && (
-            <div style={styles.errorContainer}>
+            <div className="errorContainer">
               <div>
                 <span>⚠️ API Connection Failed</span>
               </div>
@@ -358,15 +132,7 @@ function SearchPage() {
                 <p>{error}</p>
                 <button 
                   onClick={checkApiConnection}
-                  style={{
-                    marginTop: '10px',
-                    padding: '5px 10px',
-                    backgroundColor: 'white',
-                    border: '1px solid #fcc', 
-                    borderRadius: '4px',
-                    color: '#d33',
-                    cursor: 'pointer'
-                  }}
+                  className="retryButton"
                 >
                   Retry Connection
                 </button>
@@ -374,13 +140,13 @@ function SearchPage() {
             </div>
           )}
 
-          <div style={styles.searchForm}>
+          <div className="searchForm">
             <input
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search documents..."
-              style={styles.searchInput}
+              className="searchInput"
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   handleSearch();
@@ -392,68 +158,25 @@ function SearchPage() {
             <button
               onClick={handleSearch}
               disabled={loading || apiStatus !== 'connected'}
-              style={{
-                ...styles.searchButton,
-                ...(apiStatus !== 'connected' ? styles.disabledButton : {})
-              }}
+              className={`searchButton ${apiStatus !== 'connected' ? 'disabledButton' : ''}`}
             >
               {loading ? 'Searching...' : 'Search'}
             </button>
           </div>
           
-          {/* Dodajemy nowy panel ustawień SVD */}
-          <div style={styles.svdOptions}>
-            <div style={{display: 'flex', alignItems: 'center', marginRight: '15px'}}>
-              <input
-                id="useSvd"
-                type="checkbox"
-                checked={useSvd}
-                onChange={(e) => setUseSvd(e.target.checked)}
-                style={{marginRight: '5px'}}
-                disabled={apiStatus !== 'connected'}
-              />
-              <label htmlFor="useSvd">Use SVD</label>
-            </div>
-            
-            {useSvd && (
-              <div style={{display: 'flex', alignItems: 'center'}}>
-                <label htmlFor="kValue" style={{marginRight: '5px'}}>k value:</label>
-                <select
-                  id="kValue"
-                  value={kValue}
-                  onChange={(e) => setKValue(Number(e.target.value))}
-                  style={{
-                    border: '1px solid #dfe1e5', 
-                    borderRadius: '4px', 
-                    padding: '2px'
-                  }}
-                  disabled={apiStatus !== 'connected' || !useSvd}
-                >
-                  <option value={10}>10</option>
-                  <option value={25}>25</option>
-                  <option value={50}>50</option>
-                </select>
-              </div>
-            )}
-          </div>
-          
-          <div style={styles.searchStats}>
+          <div className="searchStats">
             <div>
               {stats && apiStatus === 'connected' && (
                 <span>Indexed documents: {stats.document_count} | Vocabulary: {stats.vocabulary_size}</span>
               )}
             </div>
             <div>
-              <label htmlFor="resultCount" style={{marginRight: '5px'}}>Results:</label>
+              <label htmlFor="resultCount" className="resultCountLabel">Results:</label>
               <select
                 id="resultCount"
                 value={resultCount}
                 onChange={(e) => setResultCount(Number(e.target.value))}
-                style={{
-                  border: '1px solid #dfe1e5', 
-                  borderRadius: '4px', 
-                  padding: '2px'
-                }}
+                className="resultCountSelect"
                 disabled={apiStatus !== 'connected'}
               >
                 <option value={5}>5</option>
@@ -468,39 +191,38 @@ function SearchPage() {
 
       {}
       {(loading || results.length > 0 || error) && (
-        <div style={styles.resultsContainer}>
+        <div className="resultsContainer">
           {}
           {searchTime !== null && results.length > 0 && (
-            <div style={styles.searchTime}>
+            <div className="searchTime">
               About {results.length} results ({searchTime.toFixed(3)} seconds)
-              {useSvd && <span> using SVD (k={kValue})</span>}
             </div>
           )}
           
           {loading ? (
-            <div style={styles.loadingContainer}>
-              <div style={styles.loader}></div>
+            <div className="loadingContainer">
+              <div className="loader"></div>
               <p>Searching...</p>
             </div>
           ) : error && results.length === 0 ? (
-            <div style={{textAlign: 'center', padding: '20px', color: '#666'}}>
+            <div className="errorMessage">
               {error}
             </div>
           ) : (
             <div>
               {results.map((result) => (
-                <div key={result.id} style={styles.resultItem}>
+                <div key={result.id} className="resultItem">
                   <div 
                     onClick={() => handleViewDocument(result.id)}
-                    style={{cursor: 'pointer'}}
+                    className="resultClickable"
                   >
-                    <h3 style={{...styles.resultTitle, textDecoration: 'underline'}}>
+                    <h3 className="resultTitle">
                       {result.title || 'Untitled Document'}
                     </h3>
-                    <div style={styles.resultMeta}>
+                    <div className="resultMeta">
                       Document #{result.id} | Score: {result.score.toFixed(4)}
                     </div>
-                    <p style={styles.resultSnippet}>
+                    <p className="resultSnippet">
                       {result.text ? result.text.substring(0, 150) + (result.text.length > 150 ? '...' : '') : 'No text available.'}
                     </p>
                   </div>
@@ -513,7 +235,8 @@ function SearchPage() {
     </div>
   );
 }
-  function DocumentPage() {
+
+function DocumentPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const docId = window.location.pathname.split('/').pop() || '';
@@ -561,60 +284,57 @@ function SearchPage() {
   };
 
   return (
-    <div style={styles.documentContainer}>
+    <div className="documentContainer">
       {}
-      <div style={styles.documentHeader}>
+      <div className="documentHeader">
         <button 
           onClick={() => navigate(-1)}
-          style={styles.backButton}
+          className="backButton"
         >
           ←
         </button>
         <div>
-            <Link to="/" style={{textDecoration: 'none', color: 'inherit'}}>
+            <Link to="/" className="logoLink">
               <img 
                 src={logoImage} 
                 alt="Logo" 
-                style={{ 
-                  width: '150px', 
-                  height: 'auto'
-                }} 
+                className="documentLogoImage"
               />
             </Link>
       </div>
       </div>
 
       {loading ? (
-        <div style={styles.loadingContainer}>
-          <div style={styles.loader}></div>
+        <div className="loadingContainer">
+          <div className="loader"></div>
           <p>Loading document...</p>
         </div>
       ) : error ? (
-        <div style={styles.errorContainer}>
+        <div className="errorContainer">
           {error}
         </div>
       ) : document ? (
-        <div style={styles.documentContent}>
-          <h1 style={styles.documentTitle}>
+        <div className="documentContent">
+          <h1 className="documentTitle">
             {document.title || 'Untitled Document'}
           </h1>
           
-          <div style={styles.documentSection}>
-            <h2 style={styles.documentSectionTitle}>Document Text</h2>
-            <div style={styles.documentText}>
+          <div className="documentSection">
+            <h2 className="documentSectionTitle">Document Text</h2>
+            <div className="documentText">
               {document.text || 'No text available.'}
             </div>
           </div>
           
-          <div style={styles.documentFooter}>
-            <span style={styles.documentId}>Document #{document.id}</span>
-            <span style={styles.documentScore}>
+          <div className="documentFooter">
+            <span className="documentId">Document #{document.id}</span>
+            <span className="documentScore">
               Score: {document.score.toFixed(4)}
             </span>
           </div>
         </div>
       ) : (
-        <div style={{textAlign: 'center', color: '#666'}}>
+        <div className="notFoundMessage">
           Document not found
         </div>
       )}
