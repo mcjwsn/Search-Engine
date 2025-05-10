@@ -1,197 +1,314 @@
+mod util;
 use actix_cors::Cors;
-use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
-use serde::{Deserialize, Serialize};
-use std::sync::Mutex;
+use actix_web::{web, App, HttpServer, HttpResponse, Responder};
 use std::sync::Arc;
-use crate::document::parser::parse_sqlite_documents;
-use std::fs::File;
-use std::io::{BufReader, BufWriter};
-mod document;
-mod preprocessing;
-mod stemer;
-mod matrix;
-mod engine;
+use std::path::Path;
+use std::error::Error;
+use serde::{Serialize, Deserialize};
+use nalgebra_sparse::CsrMatrix;
+use nalgebra::DMatrix;
+use actix_web::get;
 
-pub use document::parser::Document;
-const CACHED_DATA_PATH: &str = "search_index_cache.bin";
-// Data structures for our API
-#[derive(Serialize, Deserialize)]
-struct CachedData {
-    documents: Vec<Document>,
-    terms: Vec<String>,
-    tfidf_matrix: matrix::TfIdfMatrix,
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct Document {
+    pub id: i64,
+    pub title: String,
+    pub url: String,
+    pub text: String,
 }
+
+#[derive(Serialize, Deserialize)]
+struct PreprocessedData {
+    term_dict: std::collections::HashMap<String, usize>,
+    inverse_term_dict: std::collections::HashMap<usize, String>,
+    idf: Vec<f64>,
+    documents: Vec<Document>,
+    term_doc_csr: SerializableCsrMatrix,
+}
+
+#[derive(Serialize, Deserialize)]
+struct SerMatrix {
+    nrows: usize,
+    ncols: usize,
+    data: Vec<f64>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct SvdData {
+    rank: usize,
+    sigma_k: Vec<f64>,
+    u_ser: SerMatrix,
+    vt_ser: SerMatrix,
+    docs_ser: SerMatrix,
+}
+
+#[derive(Serialize, Deserialize)]
+struct SerializableCsrMatrix {
+    nrows: usize,
+    ncols: usize,
+    row_offsets: Vec<usize>,
+    col_indices: Vec<usize>,
+    values: Vec<f64>,
+}
+
+struct AppState {
+    preprocessed_data: Arc<PreprocessedData>,
+    svd_data: Arc<SvdData>,
+    k: usize,
+    noise_filter_k: usize,
+}
+
 #[derive(Serialize)]
 struct SearchResult {
-    id: i32,
     score: f64,
     title: String,
+    url: String,
+    id: i64,
     text: String,
 }
 
+#[derive(Serialize)]
+struct StatsResponse {
+    document_count: usize,
+    vocabulary_size: usize,
+}
+
 #[derive(Deserialize)]
-struct SearchQuery {
+struct SearchRequest {
     query: String,
     limit: Option<usize>,
+    method: Option<u8>, // 2 = TF-IDF, 3 = SVD/LSI, 4 = Low-rank
 }
 
-// App state to hold our search index
-struct AppState {
-    documents: Arc<Vec<Document>>,
-    tfidf_matrix: Arc<matrix::TfIdfMatrix>,
-    terms: Arc<Vec<String>>,
+impl SerializableCsrMatrix {
+    fn from_csr(csr: &CsrMatrix<f64>) -> Self {
+        SerializableCsrMatrix {
+            nrows: csr.nrows(),
+            ncols: csr.ncols(),
+            row_offsets: csr.row_offsets().to_vec(),
+            col_indices: csr.col_indices().to_vec(),
+            values: csr.values().to_vec(),
+        }
+    }
+
+    fn to_csr(&self) -> CsrMatrix<f64> {
+        CsrMatrix::try_from_csr_data(
+            self.nrows,
+            self.ncols,
+            self.row_offsets.clone(),
+            self.col_indices.clone(),
+            self.values.clone(),
+        ).unwrap()
+    }
 }
 
-#[get("/")]
-async fn hello() -> impl Responder {
-    HttpResponse::Ok().body("Information Retrieval API")
-}
+impl SvdData {
+    fn u_k(&self) -> DMatrix<f64> {
+        DMatrix::from_row_slice(
+            self.u_ser.nrows,
+            self.u_ser.ncols,
+            &self.u_ser.data
+        )
+    }
 
-#[post("/search")]
-async fn search(query: web::Json<SearchQuery>, data: web::Data<Mutex<AppState>>) -> impl Responder {
-    let state = data.lock().unwrap();
-    let limit = query.limit.unwrap_or(10);
+    fn doc_vectors(&self) -> DMatrix<f64> {
+        DMatrix::from_row_slice(
+            self.docs_ser.nrows,
+            self.docs_ser.ncols,
+            &self.docs_ser.data
+        )
+    }
 
-    let results = engine::search::search(&query.query, &state.tfidf_matrix, limit);
+    pub fn effective_rank(&self, requested_k: Option<usize>) -> usize {
+        requested_k.map(|k| k.min(self.rank)).unwrap_or(self.rank)
+    }
 
-    let search_results: Vec<SearchResult> = results
-        .into_iter()
-        .map(|(doc_idx, score)| {
-            let doc = &state.documents[doc_idx];
-            SearchResult {
-                id: doc.id.clone() as i32,
-                score,
-                title: doc.title.clone(),
-                text: doc.text.clone(),
-            }
-        })
-        .collect();
+    pub fn get_u_k(&self, requested_k: Option<usize>) -> DMatrix<f64> {
+        let k = self.effective_rank(requested_k);
+        self.u_k().columns(0, k).into_owned()
+    }
 
-    HttpResponse::Ok().json(search_results)
+    pub fn get_doc_vectors(&self, requested_k: Option<usize>) -> DMatrix<f64> {
+        let k = self.effective_rank(requested_k);
+        self.doc_vectors().rows(0, k).into_owned()
+    }
 }
 
 #[get("/stats")]
-async fn stats(data: web::Data<Mutex<AppState>>) -> impl Responder {
-    let state = data.lock().unwrap();
+async fn get_stats(data: web::Data<AppState>) -> impl Responder {
+    HttpResponse::Ok().json(StatsResponse {
+        document_count: data.preprocessed_data.documents.len(),
+        vocabulary_size: data.preprocessed_data.term_dict.len(),
+    })
+}
 
-    let stats = serde_json::json!({
-        "document_count": state.documents.len(),
-        "vocabulary_size": state.terms.len(),
+async fn search_handler(
+    data: web::Data<AppState>,
+    req: web::Json<SearchRequest>,
+) -> impl Responder {
+    let query = &req.query;
+    let top_k = req.limit.unwrap_or(10);
+    let method = req.method.unwrap_or(2); // Domyślnie TF-IDF
+
+    let csr = data.preprocessed_data.term_doc_csr.to_csr();
+
+    let results = match method {
+        2 => {
+            // Standard TF-IDF search
+            util::search::search(
+                query,
+                &data.preprocessed_data.term_dict,
+                &data.preprocessed_data.idf,
+                &csr,
+                &data.preprocessed_data.documents,
+                top_k,
+            )
+        }
+        3 => {
+            // SVD/LSI search
+            util::search::search_svd(
+                query,
+                &data.preprocessed_data.term_dict,
+                &data.preprocessed_data.idf,
+                &data.svd_data,
+                &data.preprocessed_data.documents,
+                top_k,
+            )
+        }
+        4 => {
+            // Low-rank approximation with noise filtering
+            util::search::search_with_low_rank(
+                query,
+                &data.preprocessed_data.term_dict,
+                &data.preprocessed_data.idf,
+                &data.svd_data,
+                &data.preprocessed_data.documents,
+                Some(data.noise_filter_k),
+                top_k,
+            )
+        }
+        _ => {
+            return HttpResponse::BadRequest().body("Invalid search method. Use 2 (TF-IDF), 3 (SVD/LSI), or 4 (Low-rank)");
+        }
+    };
+
+    match results {
+        Ok(results) => HttpResponse::Ok().json(
+            results.into_iter()
+                .map(|(doc, score)| SearchResult {
+                    score,
+                    title: doc.title.clone(),
+                    url: doc.url.clone(),
+                    id: doc.id,
+                    text: doc.text.clone(),
+                })
+                .collect::<Vec<_>>()
+        ),
+        Err(e) => HttpResponse::InternalServerError().body(e.to_string()),
+    }
+}
+
+#[get("/document/{id}")]
+async fn get_document(
+    data: web::Data<AppState>,
+    id: web::Path<i64>,
+) -> impl Responder {
+    let doc_id = id.into_inner();
+
+    if let Some(doc) = data.preprocessed_data.documents.iter().find(|d| d.id == doc_id) {
+        HttpResponse::Ok().json(SearchResult {
+            score: 0.0,
+            title: doc.title.clone(),
+            url: doc.url.clone(),
+            id: doc.id,
+            text: doc.text.clone(),
+        })
+    } else {
+        HttpResponse::NotFound().body("Document not found")
+    }
+}
+
+#[actix_web::main]
+async fn main() -> Result<(), Box<dyn Error>> {
+    let db_path = "../Search-Engine/backend/data/articles.db";
+    let preproc_index = "preprocessed.idx";
+    let svd_index = |k| format!("svd_k{}.idx", k);
+
+    let pre = if Path::new(preproc_index).exists() {
+        println!("Loading preprocessed data...");
+        util::data::load_preprocessed_data(preproc_index)?
+    } else {
+        println!("Building index from SQLite...");
+        let docs = util::parser::parse_sqlite_documents(db_path)?;
+        let (term_dict, inv_term_dict, coo) = util::tokenizer::build_term_document_matrix(&docs);
+        let mut csr = CsrMatrix::from(&coo);
+        let idf = util::idf::calculate_idf(&csr);
+        util::idf::apply_idf_weighting(&mut csr, &idf);
+        util::norm::normalize_columns(&mut csr);
+
+        let pre = PreprocessedData {
+            term_dict,
+            inverse_term_dict: inv_term_dict,
+            idf,
+            documents: docs,
+            term_doc_csr: SerializableCsrMatrix::from_csr(&csr),
+        };
+        util::data::save_preprocessed_data(&pre, preproc_index)?;
+        pre
+    };
+
+    let k = 25;
+    println!("Using SVD rank k={}", k);
+
+    let svd_data = if Path::new(&svd_index(k)).exists() {
+        println!("Loading SVD data (k={})...", k);
+        util::data::load_svd_data(&svd_index(k))?
+    } else {
+        println!("Performing SVD with k={}...", k);
+        let csr = pre.term_doc_csr.to_csr();
+        let svd = util::svd::perform_svd(&csr, k)?;
+        util::data::save_svd_data(&svd, &svd_index(k))?;
+        svd
+    };
+
+    let noise_filter_k = k;
+
+    let state = web::Data::new(AppState {
+        preprocessed_data: Arc::new(pre),
+        svd_data: Arc::new(svd_data),
+        k,
+        noise_filter_k,
     });
 
-    HttpResponse::Ok().json(stats)
-}
-fn load_cached_data(path: &str) -> Result<CachedData, Box<dyn std::error::Error>> {
-    let file = File::open(path)?;
-    let reader = BufReader::new(file);
-    let cached_data: CachedData = bincode::deserialize_from(reader)?;
-    Ok(cached_data)
-}
-
-// Funkcja pomocnicza do zapisywania danych w pamięci podręcznej
-fn save_cached_data(data: &CachedData, path: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let file = File::create(path)?;
-    let writer = BufWriter::new(file);
-    bincode::serialize_into(writer, data)?;
-    Ok(())
-}
-#[actix_web::main]
-async fn main() -> std::io::Result<()> {
-    println!("Próba wczytania indeksu wyszukiwania z pamięci podręcznej...");
-
-    let (documents_arc, terms_arc, tfidf_matrix_arc) =
-        match load_cached_data(CACHED_DATA_PATH) {
-            Ok(cached_data) => {
-                println!("Pomyślnie wczytano indeks wyszukiwania z pamięci podręcznej!");
-                println!("Dokumenty: {}", cached_data.documents.len());
-                println!("Rozmiar słownika: {}", cached_data.terms.len());
-                (
-                    Arc::new(cached_data.documents),
-                    Arc::new(cached_data.terms),
-                    Arc::new(cached_data.tfidf_matrix),
-                )
-            }
-            Err(e) => {
-                println!("Nie udało się wczytać z pamięci podręcznej (Powód: {}). Budowanie od nowa...", e);
-
-                println!("Ładowanie dokumentów i budowanie indeksu wyszukiwania...");
-
-                let documents = parse_sqlite_documents("data/articles.db") // Użyj document::parser::
-                    .expect("Nie udało się odczytać z SQLite");
-
-                let stop_words_path = "stop_words/english.txt";
-                let stop_words = preprocessing::tokenizer::load_stop_words(stop_words_path)
-                    .unwrap_or_else(|err| {
-                        eprintln!(
-                            "Ostrzeżenie: Nie udało się załadować stop-words z {}: {}. Kontynuacja bez stop-words.",
-                            stop_words_path, err
-                        );
-                        std::collections::HashSet::new()
-                    });
-
-                // Budowanie słownika (terms_map) jest potrzebne do zbudowania macierzy TF-IDF.
-                // terms_vec (lista terminów) jest zapisywany.
-                let terms_map = preprocessing::tokenizer::build_vocabulary(&documents, &stop_words);
-                let mut terms_vec: Vec<String> = terms_map.keys().cloned().collect();
-                terms_vec.sort_unstable(); // Opcjonalnie: sortowanie dla spójności, jeśli kolejność ma znaczenie
-
-                // Budowanie macierzy TF-IDF
-                // Uwaga: TfIdfMatrix::build może potrzebować terms_map, a nie terms_vec
-                // Jeśli TfIdfMatrix::build używa indeksów z terms_map, upewnij się, że terms_vec
-                // odpowiada tym indeksom (np. przez posortowanie terms_vec i użycie go do stworzenia mapy mapującej termin na nowy indeks)
-                // Dla uproszczenia, zakładam, że build akceptuje terms_map.
-                let tfidf_matrix = matrix::TfIdfMatrix::build(&documents, &terms_map);
-
-                println!("Indeks wyszukiwania zbudowany pomyślnie!");
-                println!("Dokumenty: {}", documents.len());
-                println!("Rozmiar słownika: {}", terms_vec.len());
-
-                // Przygotowanie danych do zapisu
-                let data_to_cache = CachedData {
-                    documents: documents.clone(), // Klonowanie jest potrzebne, bo `documents` jest potem przenoszone do Arc
-                    terms: terms_vec.clone(),     // Podobnie dla `terms_vec`
-                    tfidf_matrix: tfidf_matrix.clone(), // Podobnie dla `tfidf_matrix`
-                };
-
-                // Zapis danych do pamięci podręcznej
-                if let Err(save_err) = save_cached_data(&data_to_cache, CACHED_DATA_PATH) {
-                    eprintln!("Błąd podczas zapisywania indeksu do pamięci podręcznej: {}", save_err);
-                } else {
-                    println!("Indeks wyszukiwania zapisany do pamięci podręcznej: {}", CACHED_DATA_PATH);
-                }
-
-                (
-                    Arc::new(documents),
-                    Arc::new(terms_vec),
-                    Arc::new(tfidf_matrix),
-                )
-            }
-        };
-
-    // Tworzenie stanu aplikacji
-    let app_state = web::Data::new(Mutex::new(AppState {
-        documents: documents_arc,
-        tfidf_matrix: tfidf_matrix_arc,
-        terms: terms_arc,
-    }));
-
-    println!("Uruchamianie serwera HTTP pod adresem http://127.0.0.1:8080");
-
-    // Uruchamianie serwera HTTP
+    println!("Starting API server on http://127.0.0.1:8080");
     HttpServer::new(move || {
         let cors = Cors::default()
             .allow_any_origin()
             .allow_any_method()
-            .allow_any_header();
+            .allow_any_header()
+            .max_age(3600);
 
         App::new()
             .wrap(cors)
-            .app_data(app_state.clone())
-            .service(hello)
-            .service(search)
-            .service(stats)
+            .app_data(state.clone())
+            .service(get_stats)
+            .service(get_document)
+            .route("/search", web::post().to(search_handler))
     })
         .bind("127.0.0.1:8080")?
         .run()
-        .await
+        .await?;
+
+    Ok(())
+}
+
+fn serialize_matrix(m: &DMatrix<f64>) -> SerMatrix {
+    SerMatrix {
+        nrows: m.nrows(),
+        ncols: m.ncols(),
+        data: m.iter().cloned().collect(),
+    }
+}
+fn deserialize_matrix(s: &SerMatrix) -> DMatrix<f64> {
+    DMatrix::from_row_slice(s.nrows, s.ncols, &s.data)
 }
