@@ -3,7 +3,6 @@ import { BrowserRouter as Router, Routes, Route, Link, useNavigate, useLocation 
 import logoImage from './logo.jpg';
 import './App.css';
 
-
 interface Document {
   id: string;
   title: string;
@@ -14,6 +13,7 @@ interface Document {
 interface Stats {
   document_count: number;
   vocabulary_size: number;
+  available_k_values: number[];
 }
 
 function SearchPage() {
@@ -25,6 +25,8 @@ function SearchPage() {
   const [error, setError] = useState<string | null>(null);
   const [resultCount, setResultCount] = useState<number>(10);
   const [searchTime, setSearchTime] = useState<number | null>(null);
+  const [searchMethod, setSearchMethod] = useState<number>(2); // 2=TF-IDF, 3=SVD, 4=Low-rank
+  const [svdK, setSvdK] = useState<number>(25); // Default SVD k value
   const navigate = useNavigate();
 
   const API_URL = 'http://127.0.0.1:8080';
@@ -48,6 +50,10 @@ function SearchPage() {
         const statsData = await response.json();
         setStats(statsData);
         setApiStatus('connected');
+        // Set default k value if available
+        if (statsData.available_k_values && statsData.available_k_values.length > 0) {
+          setSvdK(statsData.available_k_values.includes(25) ? 25 : statsData.available_k_values[0]);
+        }
       } else {
         setApiStatus('error');
         setError('API responded with an error');
@@ -69,19 +75,28 @@ function SearchPage() {
     const startTime = performance.now();
     
     try {
+      const requestBody: any = { 
+        query: query,
+        limit: resultCount,
+        method: searchMethod
+      };
+
+      // Add k parameter for SVD methods
+      if (searchMethod === 3 || searchMethod === 4) {
+        requestBody.k = svdK;
+      }
+
       const response = await fetch(`${API_URL}/search`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ 
-          query: query,
-          limit: resultCount
-        }),
+        body: JSON.stringify(requestBody),
       });
       
       if (!response.ok) {
-        throw new Error(`API responded with status: ${response.status}`);
+        const errorText = await response.text();
+        throw new Error(`API error (${response.status}): ${errorText}`);
       }
       
       const data = await response.json();
@@ -107,11 +122,18 @@ function SearchPage() {
     navigate(`/document/${docId}`, { state: { document: results.find(doc => doc.id === docId) } });
   };
 
+  const getMethodName = (method: number) => {
+    switch (method) {
+      case 2: return 'TF-IDF';
+      case 3: return 'SVD/LSI';
+      case 4: return 'Low-rank';
+      default: return 'Unknown';
+    }
+  };
+
   return (
     <div className="container">
-      {}
       <div className="centerContainer">
-        {}
         <div className="logo-container">
           <img 
             src={logoImage} 
@@ -120,9 +142,7 @@ function SearchPage() {
           />
         </div>
 
-        {}
         <div className="searchContainer">
-          {}
           {apiStatus === 'error' && (
             <div className="errorContainer">
               <div>
@@ -164,19 +184,49 @@ function SearchPage() {
             </button>
           </div>
           
-          <div className="searchStats">
-            <div>
-              {stats && apiStatus === 'connected' && (
-                <span>Indexed documents: {stats.document_count} | Vocabulary: {stats.vocabulary_size}</span>
-              )}
+          <div className="searchOptions">
+            {/* Search Method Selection */}
+            <div className="optionGroup">
+              <label htmlFor="searchMethod" className="optionLabel">Method:</label>
+              <select
+                id="searchMethod"
+                value={searchMethod}
+                onChange={(e) => setSearchMethod(Number(e.target.value))}
+                className="optionSelect"
+                disabled={apiStatus !== 'connected'}
+              >
+                <option value={2}>TF-IDF</option>
+                <option value={3}>SVD/LSI</option>
+                <option value={4}>Low-rank</option>
+              </select>
             </div>
-            <div>
-              <label htmlFor="resultCount" className="resultCountLabel">Results:</label>
+
+            {/* SVD K Selection (only for SVD methods) */}
+            {(searchMethod === 3 || searchMethod === 4) && stats?.available_k_values && (
+              <div className="optionGroup">
+                <label htmlFor="svdK" className="optionLabel">SVD k:</label>
+                <select
+                  id="svdK"
+                  value={svdK}
+                  onChange={(e) => setSvdK(Number(e.target.value))}
+                  className="optionSelect"
+                  disabled={apiStatus !== 'connected'}
+                >
+                  {stats.available_k_values.map(k => (
+                    <option key={k} value={k}>{k}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Result Count Selection */}
+            <div className="optionGroup">
+              <label htmlFor="resultCount" className="optionLabel">Results:</label>
               <select
                 id="resultCount"
                 value={resultCount}
                 onChange={(e) => setResultCount(Number(e.target.value))}
-                className="resultCountSelect"
+                className="optionSelect"
                 disabled={apiStatus !== 'connected'}
               >
                 <option value={5}>5</option>
@@ -186,23 +236,37 @@ function SearchPage() {
               </select>
             </div>
           </div>
+          
+          <div className="searchStats">
+            <div>
+              {stats && apiStatus === 'connected' && (
+                <span>
+                  Indexed documents: {stats.document_count} | 
+                  Vocabulary: {stats.vocabulary_size} | 
+                  Available SVD k values: {stats.available_k_values.join(', ')}
+                </span>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
-      {}
       {(loading || results.length > 0 || error) && (
         <div className="resultsContainer">
-          {}
           {searchTime !== null && results.length > 0 && (
             <div className="searchTime">
-              About {results.length} results ({searchTime.toFixed(3)} seconds)
+              About {results.length} results using {getMethodName(searchMethod)}
+              {(searchMethod === 3 || searchMethod === 4) && ` (k=${svdK})`} 
+              ({searchTime.toFixed(3)} seconds)
             </div>
           )}
           
           {loading ? (
             <div className="loadingContainer">
               <div className="loader"></div>
-              <p>Searching...</p>
+              <p>Searching with {getMethodName(searchMethod)}
+                {(searchMethod === 3 || searchMethod === 4) && ` (k=${svdK})`}...
+              </p>
             </div>
           ) : error && results.length === 0 ? (
             <div className="errorMessage">
@@ -285,7 +349,6 @@ function DocumentPage() {
 
   return (
     <div className="documentContainer">
-      {}
       <div className="documentHeader">
         <button 
           onClick={() => navigate(-1)}
@@ -347,6 +410,39 @@ styleElement.textContent = `
   @keyframes spin {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
+  }
+  
+  .searchOptions {
+    display: flex;
+    gap: 15px;
+    margin: 10px 0;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  
+  .optionGroup {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  
+  .optionLabel {
+    font-size: 14px;
+    color: #666;
+    min-width: fit-content;
+  }
+  
+  .optionSelect {
+    padding: 5px 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    background-color: white;
+  }
+  
+  .optionSelect:disabled {
+    background-color: #f5f5f5;
+    color: #999;
   }
 `;
 document.head.appendChild(styleElement);
