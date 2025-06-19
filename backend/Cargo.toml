@@ -9,9 +9,11 @@ sprs = { version = "0.11", features = ["serde"]}
 actix-web = "4.3.1"
 actix-cors = "0.7.1"
 serde = { version = "1.0", features = ["derive"] }
+nalgebra-sparse = "0.10.0"
 serde_json = "1.0"
 rusqlite = { version = "0.35", features = ["bundled"] }
 bincode = "1.3"
+nalgebra ="0.32.6"
 regex = "1.5"
 rand = "0.9.1"
 sys-info = "0.9.1"
