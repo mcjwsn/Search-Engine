@@ -17,3 +17,7 @@ nalgebra ="0.32.6"
 regex = "1.5"
 rand = "0.9.1"
 sys-info = "0.9.1"
+libc = "0.2.172"
+
+[profile.dev.package."*"]
+opt-level = 3
