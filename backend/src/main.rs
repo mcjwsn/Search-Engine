@@ -1,3 +1,4 @@
+<<<<<<< Updated upstream
 mod util;
 use actix_cors::Cors;
 use actix_web::{web, App, HttpServer, HttpResponse, Responder};
@@ -8,6 +9,23 @@ use serde::{Serialize, Deserialize};
 use nalgebra_sparse::CsrMatrix;
 use nalgebra::DMatrix;
 use actix_web::get;
+=======
+use std::sync::Arc;
+use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
+use serde::{Deserialize, Serialize};
+use std::sync::Mutex;
+use crate::document::parser::parse_sqlite_documents;
+use std::fs::File;
+use std::io::{BufReader, BufWriter};
+use crate::matrix::SingularValueDecomposition;
+use std::path::Path;
+use std::mem;
+mod document;
+mod preprocessing;
+mod stemer;
+mod matrix;
+mod engine;
+>>>>>>> Stashed changes
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Document {
@@ -23,7 +41,20 @@ struct PreprocessedData {
     inverse_term_dict: std::collections::HashMap<usize, String>,
     idf: Vec<f64>,
     documents: Vec<Document>,
+<<<<<<< Updated upstream
     term_doc_csr: SerializableCsrMatrix,
+=======
+    terms: Vec<String>,
+    tfidf_matrix: matrix::TfIdfMatrix,
+}
+
+#[derive(Serialize)]
+struct SearchResult {
+    id: i32,
+    score: f64,
+    title: String,
+    text: String,
+>>>>>>> Stashed changes
 }
 
 #[derive(Serialize, Deserialize)]
@@ -58,6 +89,7 @@ struct AppState {
     noise_filter_k: usize,
 }
 
+<<<<<<< Updated upstream
 #[derive(Serialize)]
 struct SearchResult {
     score: f64,
@@ -88,9 +120,146 @@ impl SerializableCsrMatrix {
             row_offsets: csr.row_offsets().to_vec(),
             col_indices: csr.col_indices().to_vec(),
             values: csr.values().to_vec(),
+=======
+#[actix_web::main]
+async fn main() -> std::io::Result<()> {
+    println!("Loading search index from cache...");
+
+    let (documents_arc, terms_arc, tfidf_matrix_arc, base_tfidf_matrix) = match load_cached_data(CACHED_DATA_PATH) {
+        Ok(cached_data) => {
+            println!("Successfully loaded search index from cache!");
+            let loaded_tfidf_matrix = cached_data.tfidf_matrix;
+            (
+                Arc::new(cached_data.documents),
+                Arc::new(cached_data.terms),
+                Arc::new(loaded_tfidf_matrix.clone()),
+                loaded_tfidf_matrix,
+            )
         }
+        Err(e) => {
+            println!("Failed to load from cache (Reason: {}). Rebuilding...", e);
+            println!("Loading documents and building search index...");
+
+            let documents = parse_sqlite_documents("data/articles.db")
+                .expect("Failed to read from SQLite");
+
+            let stop_words_path = "stop_words/english.txt";
+            let stop_words = preprocessing::tokenizer::load_stop_words(stop_words_path)
+                .unwrap_or_else(|err| {
+                    eprintln!(
+                        "Warning: Failed to load stop-words from {}: {}. Continuing without stop-words.",
+                        stop_words_path, err
+                    );
+                    std::collections::HashSet::new()
+                });
+
+            let terms_map = preprocessing::tokenizer::build_vocabulary(&documents, &stop_words);
+            let mut terms_vec: Vec<String> = terms_map.keys().cloned().collect();
+            terms_vec.sort_unstable();
+
+            let new_tfidf_matrix = matrix::TfIdfMatrix::build(&documents, &terms_map);
+
+            println!("Search index built successfully!");
+            println!("Documents: {}", documents.len());
+            println!("Vocabulary size: {}", terms_vec.len());
+
+            let data_to_cache = CachedData {
+                documents: documents.clone(),
+                terms: terms_vec.clone(),
+                tfidf_matrix: new_tfidf_matrix.clone(),
+            };
+
+            if let Err(save_err) = save_cached_data(&data_to_cache, CACHED_DATA_PATH) {
+                eprintln!("Error saving index to cache: {}", save_err);
+            } else {
+                println!("Search index saved to cache: {}", CACHED_DATA_PATH);
+            }
+
+            (
+                Arc::new(documents),
+                Arc::new(terms_vec),
+                Arc::new(new_tfidf_matrix.clone()),
+                new_tfidf_matrix,
+            )
+        }
+    };
+
+    // Sample queries for testing
+    let sample_queries = vec![
+        "science",
+        "technology",
+        "health",
+        "artificial intelligence",
+        "climate change",
+    ];
+
+    // Process each SVD configuration one at a time to manage memory
+    let svd_configs = [
+        (10, SVD_CACHE_10),
+        (25, SVD_CACHE_25),
+        (50, SVD_CACHE_50),
+    ];
+
+    for (k, path) in &svd_configs {
+        println!("\n==================================================================");
+        println!("PROCESSING SVD CONFIGURATION WITH k={}", k);
+        println!("==================================================================");
+
+        // Load or compute SVD
+        let svd = if Path::new(path).exists() {
+            println!("Loading SVD from cache: {}", path);
+            match matrix::TfIdfMatrix::load_svd(path) {
+                Ok(svd) => {
+                    println!("Successfully loaded SVD with k={}", k);
+                    svd
+                }
+                Err(e) => {
+                    println!("Failed to load SVD from cache, computing fresh: {}", e);
+                    let svd = base_tfidf_matrix.compute_svd(*k);
+                    if let Err(e) = svd.save(path) {
+                        eprintln!("Warning: Failed to save computed SVD: {}", e);
+                    }
+                    svd
+                }
+            }
+        } else {
+            println!("No cache found, computing fresh SVD with k={}", k);
+            let svd = base_tfidf_matrix.compute_svd(*k);
+            if let Err(e) = svd.save(path) {
+                eprintln!("Warning: Failed to save computed SVD: {}", e);
+            }
+            svd
+        };
+
+        // Test each query with the current SVD configuration
+        for query in &sample_queries {
+            println!("\n--------------------------------------------------");
+            println!("Testing query: '{}' with k={}", query, k);
+
+            // SVD search
+            let start = std::time::Instant::now();
+            let svd_results = engine::search::search_with_svd(query, &base_tfidf_matrix, &svd, 5);
+            let svd_time = start.elapsed();
+
+            println!("SVD search results (k={}, took {:?}):", k, svd_time);
+            for (i, (doc_idx, score)) in svd_results.iter().enumerate() {
+                println!("{}. {} (score: {:.4})", i+1, documents_arc[*doc_idx].title, score);
+            }
+
+            // Force a small delay to let the system process memory
+            std::thread::sleep(std::time::Duration::from_millis(100));
+>>>>>>> Stashed changes
+        }
+
+        // Clean up and free memory before next iteration
+        drop(svd);
+        println!("\nFinished testing with k={}, memory freed", k);
+
+        // Force garbage collection by suggesting a heap compact
+        unsafe { libc::malloc_trim(0); }
     }
 
+<<<<<<< Updated upstream
     fn to_csr(&self) -> CsrMatrix<f64> {
         CsrMatrix::try_from_csr_data(
             self.nrows,
@@ -140,6 +309,91 @@ async fn get_stats(data: web::Data<AppState>) -> impl Responder {
         document_count: data.preprocessed_data.documents.len(),
         vocabulary_size: data.preprocessed_data.term_dict.len(),
     })
+=======
+    // Now run a web server to provide the search functionality
+    println!("\nStarting web server at http://127.0.0.1:8080");
+
+    let app_state = web::Data::new(AppState {
+        documents: documents_arc.clone(),
+        terms: terms_arc,
+        tfidf_matrix: tfidf_matrix_arc,
+    });
+
+    HttpServer::new(move || {
+        App::new()
+            .app_data(app_state.clone())
+            .service(search)
+    })
+        .bind("127.0.0.1:8080")?
+        .run()
+        .await
+}
+
+#[actix_web::post("/search")]
+pub async fn search(
+    query: web::Json<SearchQueryWithSvd>,
+    state: web::Data<AppState>,
+) -> impl Responder {
+    let limit = query.limit.unwrap_or(10);
+    let k_value = query.k_value.unwrap_or(25);
+
+    if query.use_svd {
+        // Load appropriate SVD model based on k_value
+        let svd_path = match k_value {
+            k if k <= 10 => SVD_CACHE_10,
+            k if k <= 25 => SVD_CACHE_25,
+            _ => SVD_CACHE_50,
+        };
+
+        // Load SVD from cache
+        match matrix::TfIdfMatrix::load_svd(svd_path) {
+            Ok(svd) => {
+                let results = engine::search::search_with_svd(
+                    &query.query,
+                    &state.tfidf_matrix,
+                    &svd,
+                    limit
+                );
+
+                let search_results: Vec<SearchResult> = results
+                    .into_iter()
+                    .map(|(doc_idx, score)| {
+                        let doc = &state.documents[doc_idx];
+                        SearchResult {
+                            id: doc.id as i32,
+                            score,
+                            title: doc.title.clone(),
+                            text: doc.text.clone(),
+                        }
+                    })
+                    .collect();
+
+                HttpResponse::Ok().json(search_results)
+            },
+            Err(e) => {
+                HttpResponse::InternalServerError().body(format!("Failed to load SVD: {}", e))
+            }
+        }
+    } else {
+        // Regular search without SVD
+        let results = engine::search::search(&query.query, &state.tfidf_matrix, limit);
+
+        let search_results: Vec<SearchResult> = results
+            .into_iter()
+            .map(|(doc_idx, score)| {
+                let doc = &state.documents[doc_idx];
+                SearchResult {
+                    id: doc.id as i32,
+                    score,
+                    title: doc.title.clone(),
+                    text: doc.text.clone(),
+                }
+            })
+            .collect();
+
+        HttpResponse::Ok().json(search_results)
+    }
+>>>>>>> Stashed changes
 }
 
 async fn search_handler(
@@ -208,6 +462,7 @@ async fn search_handler(
     }
 }
 
+<<<<<<< Updated upstream
 #[get("/document/{id}")]
 async fn get_document(
     data: web::Data<AppState>,
@@ -311,4 +566,11 @@ fn serialize_matrix(m: &DMatrix<f64>) -> SerMatrix {
 }
 fn deserialize_matrix(s: &SerMatrix) -> DMatrix<f64> {
     DMatrix::from_row_slice(s.nrows, s.ncols, &s.data)
+=======
+fn save_cached_data(data: &CachedData, path: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let file = File::create(path)?;
+    let writer = BufWriter::new(file);
+    bincode::serialize_into(writer, data)?;
+    Ok(())
+>>>>>>> Stashed changes
 }
